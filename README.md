@@ -1,4 +1,4 @@
-# Agentic Coder Orchestrator
+# LangChain Agent Visualizer
 
 A local, backend **AI coding assistant** that demonstrates the modern LangChain
 agent stack end-to-end and lets you **watch it work**:
