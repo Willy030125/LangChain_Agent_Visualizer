@@ -14,6 +14,8 @@ agent stack end-to-end and lets you **watch it work**:
 The agents can build **real full-stack demos** (FastAPI backend + HTML/JS frontend),
 run them, and you can preview the rendered result in the UI.
 
+![Agentic Visualizer WebUI](webui_display.jpg)
+
 ---
 
 ## Architecture
