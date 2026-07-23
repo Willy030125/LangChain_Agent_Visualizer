@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agentic Coder — Live Flow</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --border:#30363d;
+    --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --ok:#3fb950;
+    --user:#1f6feb; --tool:#d29922; --exec:#f778ba; --write:#3fb950;
+    --read:#58a6ff; --sub:#bc8cff; --err:#f85149; --model:#e3b341; --think:#a371f7;
+    --mono:ui-monospace,SFMono-Regular,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;
+    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:13.5px}
+  header{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0}
+  header h1{font-size:15px;margin:0;font-weight:600}
+  header h1 span{color:var(--accent)}
+  .badge{font-size:12px;color:var(--muted);background:var(--panel2);border:1px solid var(--border);padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .badge b{color:var(--ok)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--err);display:inline-block;margin-right:5px}
+  .dot.ok{background:var(--ok)}
+  main{flex:1;display:grid;grid-template-columns:300px 1fr 250px;min-height:0}
+  .col{display:flex;flex-direction:column;min-height:0;min-width:0}
+  .col.chat{border-right:1px solid var(--border)}
+  .col.side{border-left:1px solid var(--border)}
+  .col.flow{background:#0a0e14}
+
+  /* chat */
+  #transcript{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:9px}
+  .msg{max-width:94%;padding:8px 11px;border-radius:10px;white-space:pre-wrap;word-wrap:break-word;line-height:1.5}
+  .msg.user{align-self:flex-end;background:var(--user);color:#fff}
+  .msg.assistant{align-self:flex-start;background:var(--panel);border:1px solid var(--border)}
+  .msg .who{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);margin-bottom:3px;font-weight:700}
+  .empty{color:var(--muted);text-align:center;margin:auto;max-width:250px;line-height:1.6;font-size:12.5px}
+  .presets{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px 4px;background:var(--panel)}
+  .preset{font-size:11px;color:var(--accent);background:var(--panel2);border:1px solid var(--border);border-radius:14px;padding:4px 9px;cursor:pointer}
+  .preset:hover{border-color:var(--accent)}
+  .controls{display:flex;gap:7px;align-items:center;flex-wrap:wrap;padding:6px 10px;background:var(--panel)}
+  select,input[type=text]{background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 8px;font-size:12px}
+  label.chk{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;cursor:pointer}
+  .composer{display:flex;gap:7px;padding:0 10px 10px;background:var(--panel)}
+  textarea{flex:1;resize:none;height:48px;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:9px;padding:7px 9px;font-size:12.5px;font-family:inherit}
+  button{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:0 15px;font-size:13px;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--border);padding:6px 9px;font-weight:500}
+
+  /* flow */
+  .flow-inner{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+  .stitle{font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);font-weight:700;margin-bottom:7px}
+  .stitle .tag{color:var(--sub);margin-left:6px}
+  .explain{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:9px 11px;color:var(--muted);font-size:12px;line-height:1.5}
+  .explain b{color:var(--text)}
+
+  /* topology diagram */
+  .topo{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .topo.deep{flex-direction:column;align-items:stretch}
+  .pill{background:var(--panel2);border:1px solid var(--border);border-radius:20px;padding:6px 12px;font-size:11px;color:var(--muted);font-weight:600;flex:0 0 auto}
+  .arrow{color:var(--muted);font-size:16px;flex:0 0 auto}
+  .lane{display:flex;gap:8px;flex-wrap:wrap;flex:1}
+  .node{position:relative;background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:9px 11px;min-width:150px;flex:0 0 auto;transition:all .2s;opacity:.6}
+  .node.active{opacity:1}
+  .node .n-top{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12.5px}
+  .node .pip{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+  .node .n-model{font-family:var(--mono);font-size:10.5px;color:var(--model);margin-top:3px}
+  .node .n-role{font-size:10.5px;color:var(--muted);margin-top:2px}
+  .node .n-meta{display:flex;gap:8px;margin-top:6px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .node .stat{margin-left:auto;font-weight:700}
+  .node.st-think{border-color:var(--think);box-shadow:0 0 16px -5px var(--think)}
+  .node.st-think .pip{background:var(--think);animation:blink .8s infinite}
+  .node.st-gen{border-color:var(--model);box-shadow:0 0 16px -5px var(--model)}
+  .node.st-gen .pip{background:var(--model);animation:blink .6s infinite}
+  .node.st-tool{border-color:var(--tool);box-shadow:0 0 16px -5px var(--tool)}
+  .node.st-tool .pip{background:var(--tool);animation:blink .7s infinite}
+  .node.st-done{border-color:var(--ok)}
+  .node.st-done .pip{background:var(--ok)}
+  @keyframes blink{50%{opacity:.25}}
+  .supervisor{align-self:center;min-width:200px;border-color:var(--sub)}
+  .deep .fanline{color:var(--muted);text-align:center;font-size:14px;margin:-2px 0}
+
+  /* pipeline */
+  .pipe{display:flex;align-items:stretch;gap:0;flex-wrap:nowrap;overflow-x:auto;padding:4px 2px 8px}
+  .stage{flex:0 0 auto;min-width:78px;background:var(--panel);border:1px solid var(--border);border-radius:9px;padding:8px 6px;text-align:center;transition:all .2s;opacity:.45}
+  .stage .ic{font-size:17px;line-height:1}
+  .stage .lb{font-size:10px;margin-top:4px;color:var(--muted);font-weight:600}
+  .stage.active{opacity:1;transform:translateY(-2px)}.stage.active .lb{color:var(--text)}
+  .stage.s-model.active{border-color:var(--model);box-shadow:0 0 14px -4px var(--model)}
+  .stage.s-think.active{border-color:var(--think);box-shadow:0 0 14px -4px var(--think)}
+  .stage.s-agent.active{border-color:var(--accent);box-shadow:0 0 14px -4px var(--accent)}
+  .stage.s-tool.active{border-color:var(--tool);box-shadow:0 0 14px -4px var(--tool)}
+  .stage.s-write.active{border-color:var(--write);box-shadow:0 0 14px -4px var(--write)}
+  .stage.s-exec.active{border-color:var(--exec);box-shadow:0 0 14px -4px var(--exec)}
+  .stage.s-read.active{border-color:var(--read);box-shadow:0 0 14px -4px var(--read)}
+  .stage.s-result.active{border-color:var(--ok);box-shadow:0 0 14px -4px var(--ok)}
+  .stage.s-done.active{border-color:var(--ok);box-shadow:0 0 20px -3px var(--ok)}
+  .conn{flex:0 0 16px;align-self:center;height:3px;border-radius:2px;background:var(--border)}
+  .conn.flow{background:linear-gradient(90deg,var(--border),var(--accent),var(--border));background-size:200% 100%;animation:beam .8s linear infinite}
+  @keyframes beam{from{background-position:120% 0}to{background-position:-120% 0}}
+  .branch{flex:0 0 auto;display:flex;flex-direction:column;gap:5px}
+  .branch .stage{min-width:110px;padding:6px}.branch .stage .ic{font-size:14px}
+  .caption{background:#000;border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:12px;min-height:18px}
+  .caption .k{color:var(--muted)} .loop-note{font-size:11px;color:var(--muted);text-align:center}.loop-note b{color:var(--tool)}
+
+  #steps{display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto}
+  .step{font-family:var(--mono);font-size:11px;padding:5px 8px;border-radius:6px;background:var(--panel);border-left:3px solid var(--border);color:var(--muted);animation:in .2s}
+  @keyframes in{from{opacity:0;transform:translateX(-6px)}to{opacity:1}}
+  .step .sc{color:var(--sub);font-weight:700}
+  .step.call{border-left-color:var(--tool)}.step.call b{color:var(--tool)}
+  .step.result{border-left-color:var(--ok)}.step.result .txt{color:var(--text)}
+  .step.delegate{border-left-color:var(--sub);color:var(--text)}
+  .step.think{border-left-color:var(--think)} .step.done{border-left-color:var(--ok);color:var(--ok)}
+
+  /* side panel */
+  .side .sec{border-bottom:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+  .side .sec.grow{flex:1}
+  .side .hd{padding:9px 11px;display:flex;justify-content:space-between;align-items:center}
+  .side .hd b{font-size:12px}
+  #files{overflow-y:auto;padding:4px 6px;max-height:34vh}
+  .file{padding:5px 8px;border-radius:6px;cursor:pointer;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .file:hover{background:var(--panel2);color:var(--text)}
+  .file.new{animation:pop .7s}@keyframes pop{0%{background:var(--ok);color:#000}100%{}}
+  .btnrow{display:flex;gap:6px;padding:8px 10px;flex-wrap:wrap}
+  .btnrow button{padding:7px 10px;font-size:12px}
+  #servers{padding:4px 8px 10px;font-size:11px}
+  .srv{display:flex;align-items:center;gap:6px;padding:4px 0;font-family:var(--mono)}
+  .srv a{color:var(--accent);text-decoration:none} .srv a:hover{text-decoration:underline}
+  .srv .k{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .srv .k.off{background:var(--err)}
+
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:24px;z-index:10}
+  .modal.show{display:flex}
+  .modal .box{background:var(--panel);border:1px solid var(--border);border-radius:12px;width:min(1100px,100%);height:min(85vh,900px);display:flex;flex-direction:column}
+  .modal .top{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:12px}
+  .modal pre{margin:0;padding:14px;overflow:auto;font-family:var(--mono);font-size:12px;line-height:1.5}
+  .modal iframe{flex:1;border:0;background:#fff;border-radius:0 0 12px 12px}
+  .x{cursor:pointer;color:var(--muted);font-size:16px;background:none;padding:2px 7px}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 Agentic <span>Coder</span> — Live Flow</h1>
+  <span class="badge"><span id="dot" class="dot"></span><span id="status">connecting…</span></span>
+  <span class="badge">default <b id="model">—</b></span>
+  <span style="flex:1"></span>
+  <span class="badge" id="ws">workspace</span>
+</header>
+
+<main>
+  <section class="col chat">
+    <div id="transcript"><div class="empty" id="empty">Pick a mode + preset, hit Send, and watch every stage light up as the models think, call tools, write code, and test it.</div></div>
+    <div class="presets" id="presets"></div>
+    <div class="controls">
+      <select id="mode">
+        <option value="single">① Single · LangChain Agent</option>
+        <option value="parallel">② Multi-Agent · LangGraph (parallel)</option>
+        <option value="orchestrator" selected>③ DeepAgents · Orchestrator</option>
+      </select>
+      <input type="text" id="thread" value="ui-1" size="7" title="conversation id (memory)" />
+      <button class="ghost" id="newthread" title="new conversation">＋</button>
+      <label class="chk"><input type="checkbox" id="stream" checked /> live</label>
+      <button class="ghost" id="clear">Clear</button>
+    </div>
+    <div class="composer"><textarea id="input" placeholder="Describe the software to build… (Enter to send)"></textarea><button id="send">Send</button></div>
+  </section>
+
+  <section class="col flow">
+    <div class="flow-inner">
+      <div><div class="stitle">Paradigm <span class="tag" id="paraTag"></span></div><div class="explain" id="explain"></div></div>
+      <div><div class="stitle">Agents &amp; Models <span class="tag">live / idle · 💭 thinking · ⌨️ tokens</span></div><div class="topo" id="topo"></div></div>
+      <div>
+        <div class="stitle">Execution pipeline (per active agent)</div>
+        <div class="pipe" id="pipe">
+          <div class="stage s-model" id="st-model"><div class="ic">🧠</div><div class="lb">Ollama Model</div></div>
+          <div class="conn" id="c1"></div>
+          <div class="stage s-think" id="st-think"><div class="ic">💭</div><div class="lb">Thinking</div></div>
+          <div class="conn" id="c2"></div>
+          <div class="stage s-agent" id="st-agent"><div class="ic">🤖</div><div class="lb">Agent</div></div>
+          <div class="conn" id="c3"></div>
+          <div class="stage s-tool" id="st-tool"><div class="ic">🛠️</div><div class="lb">Tool Call</div></div>
+          <div class="conn" id="c4"></div>
+          <div class="branch">
+            <div class="stage s-write" id="st-write"><div class="ic">✍️</div><div class="lb">Write Code</div></div>
+            <div class="stage s-exec" id="st-exec"><div class="ic">▶️</div><div class="lb">Execute / Interpret</div></div>
+            <div class="stage s-read" id="st-read"><div class="ic">📖</div><div class="lb">Read Files</div></div>
+          </div>
+          <div class="conn" id="c5"></div>
+          <div class="stage s-result" id="st-result"><div class="ic">📊</div><div class="lb">Result</div></div>
+          <div class="conn" id="c6"></div>
+          <div class="stage s-done" id="st-done"><div class="ic">✅</div><div class="lb">Done / Test</div></div>
+        </div>
+        <div class="loop-note">↺ after each tool result, control loops <b>back to the agent</b> — that loop IS the agent.</div>
+      </div>
+      <div><div class="stitle">Current step</div><div class="caption" id="caption"><span class="k">idle — waiting for a task.</span></div></div>
+      <div><div class="stitle">Live steps</div><div id="steps"></div></div>
+    </div>
+  </section>
+
+  <aside class="col side">
+    <div class="sec grow">
+      <div class="hd"><b>📁 Workspace</b><button class="ghost" id="refresh">↻</button></div>
+      <div id="files"></div>
+    </div>
+    <div class="sec">
+      <div class="hd"><b>🖥️ Preview / Run</b></div>
+      <div class="btnrow">
+        <button class="ghost" id="runBackend">▶ Run backend</button>
+        <button class="ghost" id="runFrontend">▶ Run frontend</button>
+        <button class="ghost" id="stopSrv">■ Stop</button>
+      </div>
+      <div class="btnrow" style="padding-top:0">
+        <button class="ghost" id="preview">🖥️ Render frontend</button>
+        <button class="ghost" id="previewTab">↗ new tab</button>
+      </div>
+      <div class="hd" style="padding-top:0"><b style="font-size:11px;color:var(--muted)">Running servers</b><button class="ghost" id="refreshSrv">↻</button></div>
+      <div id="servers">(none)</div>
+    </div>
+  </aside>
+</main>
+
+<div class="modal" id="modal"><div class="box"><div class="top"><span id="mpath"></span><button class="x" id="mclose">✕</button></div><div id="mbody"></div></div></div>
+
+<script>
+const $=s=>document.querySelector(s);
+let busy=false, seenFiles=new Set(), nodeIds=new Set(), _activeSub=null;
+
+const MODES={
+  single:{tag:'LangChain Agent',explain:'<b>One agent, one ReAct loop.</b> A single <b>create_agent</b> runs: model <b>thinks</b> → decides a <b>tool call</b> → tool runs → result returns → repeat until it answers. Watch one node cycle through thinking → tool → result.'},
+  parallel:{tag:'LangGraph (fan-out / join)',explain:'<b>Three models at once.</b> A <b>LangGraph</b> fans out from START to <b>backend / frontend / docs</b> nodes that run <b>concurrently</b> (different models — watch them all glow together), then joins at <b>aggregate</b>. Independent subtasks in parallel.'},
+  orchestrator:{tag:'DeepAgents (supervisor)',explain:'<b>A supervisor that delegates.</b> The <b>orchestrator</b> plans then hands jobs to <b>subagents</b> (planner/coder/debugger/reviewer/reporter) via the <b>task</b> tool. Watch <b>delegate</b> arrows light the subagent that was handed work.'},
+};
+const PRESETS=[
+  {label:'🛍️ Product storefront',text:"Build a full-stack demo web app for an online store. Backend (FastAPI) serves a catalog of ~6 products as JSON — each with name, price, category, and a short description. Frontend fetches the data and renders the products as a responsive grid of cards. Then start the backend and verify it returns the products."},
+  {label:'✅ Team task board',text:"Build a full-stack demo web app: a team task board. Backend (FastAPI) serves ~8 tasks as JSON — each with title, assignee, status (todo/doing/done), and due date. Frontend fetches the data and renders the tasks grouped by status (three columns). Then start the backend and verify the data."},
+  {label:'📊 Sales dashboard',text:"Build a full-stack demo web app: a small sales analytics dashboard. Backend (FastAPI) serves recent orders as JSON — each with customer, product, amount, and date. Frontend fetches the data, shows total revenue and order count at the top, then a table of orders. Then start the backend and verify it."},
+  {label:'🏨 Property listings',text:"Build a full-stack demo web app for a rental listings site. Backend (FastAPI) serves ~6 properties as JSON — each with title, location, pricePerNight, bedrooms, and a short description. Frontend fetches the data and renders property cards. Then start the backend and verify the listings."},
+];
+
+const WRITE=['write_file','edit_file','make_dir'],EXEC=['run_python','run_node','run_shell','start_backend','start_frontend','http_get'],READ=['read_file','list_dir','list_servers'];
+
+// ---- stage lights ----
+const T={};
+function act(id,ms=1600){const el=$(id);if(!el)return;el.classList.add('active');clearTimeout(T[id]);T[id]=setTimeout(()=>el.classList.remove('active'),ms);}
+function flow(id,ms=800){const el=$(id);if(!el)return;el.classList.add('flow');clearTimeout(T['f'+id]);T['f'+id]=setTimeout(()=>el.classList.remove('flow'),ms);}
+function caption(h){$('#caption').innerHTML=h;}
+
+// ---- topology / agent nodes ----
+const NODE_TIMERS={}, COUNTS={};
+async function loadTopology(mode){
+  $('#paraTag').textContent=MODES[mode].tag; $('#explain').innerHTML=MODES[mode].explain;
+  let topo; try{ topo=await (await fetch('/api/topology?mode='+mode)).json(); }catch{ return; }
+  const box=$('#topo'); box.className='topo'+(topo.type==='deep'?' deep':''); box.innerHTML=''; nodeIds=new Set(); Object.keys(COUNTS).forEach(k=>delete COUNTS[k]);
+  const nodeCard=n=>{
+    nodeIds.add(n.id); COUNTS[n.id]={t:0,k:0};
+    const el=document.createElement('div'); el.className='node'+(n.kind==='supervisor'?' supervisor':''); el.id='nd-'+n.id;
+    el.innerHTML=`<div class="n-top"><span class="pip"></span>${n.label}</div>`+
+      (n.model?`<div class="n-model">${n.model}</div>`:'')+
+      (n.role?`<div class="n-role">${n.role}</div>`:'')+
+      `<div class="n-meta"><span class="think">💭0</span><span class="tok">⌨️0</span><span class="stat">idle</span></div>`;
+    return el;
+  };
+  if(topo.type==='react'){
+    box.appendChild(nodeCard(topo.nodes[0]));
+  } else if(topo.type==='graph'){
+    const workers=topo.nodes.filter(n=>n.kind==='worker');
+    box.appendChild(el('pill','START'));
+    box.appendChild(el('arrow','▶'));
+    const lane=document.createElement('div'); lane.className='lane'; workers.forEach(w=>lane.appendChild(nodeCard(w))); box.appendChild(lane);
+    box.appendChild(el('arrow','▶')); box.appendChild(el('pill','aggregate (join)'));
+    box.appendChild(el('arrow','▶')); box.appendChild(el('pill','END'));
+  } else if(topo.type==='deep'){
+    const sup=topo.nodes.find(n=>n.kind==='supervisor'); box.appendChild(nodeCard(sup));
+    box.appendChild(el('fanline','│  delegates ↓'));
+    const lane=document.createElement('div'); lane.className='lane'; topo.nodes.filter(n=>n.kind==='subagent').forEach(s=>lane.appendChild(nodeCard(s))); box.appendChild(lane);
+  }
+}
+function el(cls,txt){const d=document.createElement('div');d.className=cls;d.textContent=txt;return d;}
+function nodeId(scope){
+  // In DeepAgents mode, subagent activity comes tagged scope="tools" (it runs under
+  // the orchestrator's task() namespace) — attribute it to the delegated subagent.
+  if(scope==='tools'&&_activeSub&&nodeIds.has(_activeSub)) return _activeSub;
+  return nodeIds.has(scope)?scope:(nodeIds.has('main')?'main':null);
+}
+function setNode(scope,status){
+  const id=nodeId(scope); if(!id) return; const el=$('#nd-'+id); if(!el) return;
+  el.classList.add('active'); el.classList.remove('st-think','st-gen','st-tool','st-done');
+  if(status) el.classList.add('st-'+status);
+  const stat=el.querySelector('.stat'); stat.textContent = status==='think'?'thinking':status==='gen'?'generating':status==='tool'?'tool':'active';
+  clearTimeout(NODE_TIMERS[id]);
+  NODE_TIMERS[id]=setTimeout(()=>{el.classList.remove('st-think','st-gen','st-tool');el.querySelector('.stat').textContent='idle';el.classList.remove('active');},2600);
+}
+function bump(scope,kind){ const id=nodeId(scope); if(!id||!COUNTS[id])return; COUNTS[id][kind]++; const el=$('#nd-'+id); if(!el)return;
+  el.querySelector('.think').textContent='💭'+COUNTS[id].t; el.querySelector('.tok').textContent='⌨️'+COUNTS[id].k; }
+
+// ---- steps ----
+function step(cls,html){const s=document.createElement('div');s.className='step '+cls;s.innerHTML=html;$('#steps').prepend(s);while($('#steps').children.length>50)$('#steps').lastChild.remove();}
+
+// ---- transcript ----
+function clearEmpty(){const e=$('#empty');if(e)e.remove();}
+function addMsg(role,who,text=''){clearEmpty();const el=document.createElement('div');el.className='msg '+role;el.innerHTML=`<div class="who">${who}</div><div class="body"></div>`;el.querySelector('.body').textContent=text;$('#transcript').appendChild(el);$('#transcript').scrollTop=1e9;return el.querySelector('.body');}
+
+// ---- event handling ----
+function onEvent(ev,d){
+  const scope=d.scope||'main';
+  if(ev==='thinking'){
+    act('#st-model');act('#st-think');act('#st-agent');flow('#c1');flow('#c2');
+    setNode(scope,'think'); bump(scope,'t');
+    caption(`<span class="k">💭 ${scope} thinking…</span> ${(d.text||'').replace(/\s+/g,' ').slice(-70)}`);
+  } else if(ev==='token'){
+    act('#st-model');act('#st-agent');flow('#c2');
+    setNode(scope,'gen'); bump(scope,'k');
+  } else if(ev==='tool_call'){
+    act('#st-agent');act('#st-tool');flow('#c3');flow('#c4');
+    let ic='📖'; if(WRITE.includes(d.name)){act('#st-write');ic='✍️';} else if(EXEC.includes(d.name)){act('#st-exec');ic='▶️';} else {act('#st-read');}
+    setNode(scope,'tool');
+    const a=d.args?JSON.stringify(d.args).slice(0,70):'';
+    caption(`<span class="k">🛠️ ${scope} →</span> <b>${d.name}</b>(${a})`);
+    step('call',`${ic} <span class="sc">${scope}</span> → <b>${d.name}</b> <span style="color:var(--muted)">${a}</span>`);
+  } else if(ev==='tool_result'){
+    act('#st-result');act('#st-agent');flow('#c5');flow('#c6');
+    setNode(scope,'gen');
+    const c=(d.content||'').replace(/\s+/g,' '); const short=c.slice(0,90);
+    caption(`<span class="k">📊 ${scope} result →</span> <b>${d.name}</b>: ${short}`);
+    step('result',`📊 <span class="sc">${scope}</span> <b>${d.name}</b> → <span class="txt">${short}${c.length>90?'…':''}</span>`);
+  } else if(ev==='delegate'){
+    const sub=d.subagent||'subagent'; _activeSub=sub; setNode('main','tool'); setNode(sub,'think');
+    caption(`<span class="k">🤝 orchestrator →</span> <b>${sub}</b>: ${(d.description||'').slice(0,60)}`);
+    step('delegate',`🤝 <b>orchestrator</b> delegates → <span class="sc">${sub}</span> ${(d.description||'').slice(0,55)}`);
+  } else if(ev==='error'){
+    caption(`<span style="color:var(--err)">⚠️ ${d.message||'error'}</span>`); step('done','⚠️ '+(d.message||'error'));
+  } else if(ev==='done'){
+    _activeSub=null;
+    act('#st-done',3000); caption('<span style="color:var(--ok)">✅ done.</span>'); step('done','✅ run complete');
+    document.querySelectorAll('.node').forEach(n=>{n.classList.remove('st-think','st-gen','st-tool');n.querySelector('.stat').textContent='idle';});
+    loadFiles(true); loadServers();
+  }
+}
+
+// ---- send ----
+async function sendStreaming(message,mode,thread){
+  const r=await fetch('/chat/stream',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,mode,thread_id:thread})});
+  const reader=r.body.getReader(),dec=new TextDecoder();let buf='';const bub={};let doneSeen=false;
+  while(true){const {value,done}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true}).replace(/\r\n/g,'\n');  // sse-starlette uses CRLF
+    const blocks=buf.split('\n\n');buf=blocks.pop();
+    for(const block of blocks){let ev='message',dl=[];for(const line of block.split('\n')){if(line.startsWith('event:'))ev=line.slice(6).trim();else if(line.startsWith('data:'))dl.push(line.slice(5).trim());}
+      if(!dl.length)continue;let d;try{d=JSON.parse(dl.join('\n'));}catch{continue;}
+      onEvent(ev,d); if(ev==='done')doneSeen=true;
+      if(ev==='token'&&d.text){const k=d.scope||'main';if(!bub[k])bub[k]=addMsg('assistant',k==='main'?'assistant':k,'');bub[k].textContent+=d.text;$('#transcript').scrollTop=1e9;}
+    }}
+  if(!doneSeen)onEvent('done',{});
+}
+async function sendBlocking(message,mode,thread){const b=addMsg('assistant','assistant','');b.innerHTML='<span class="spin"></span>';
+  const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message,mode,thread_id:thread})});b.textContent=(await r.json()).reply;loadFiles(true);loadServers();}
+async function send(){if(busy)return;const message=$('#input').value.trim();if(!message)return;busy=true;$('#send').disabled=true;addMsg('user','you',message);$('#input').value='';$('#steps').innerHTML='';
+  const mode=$('#mode').value,thread=$('#thread').value.trim()||'ui-1';
+  try{$('#stream').checked?await sendStreaming(message,mode,thread):await sendBlocking(message,mode,thread);}
+  catch(e){addMsg('assistant','error','Request failed: '+e.message);caption('<span style="color:var(--err)">'+e.message+'</span>');}
+  finally{busy=false;$('#send').disabled=false;$('#input').focus();}}
+
+// ---- files / preview / servers ----
+async function loadFiles(flash){try{const {files}=await (await fetch('/api/files')).json();const box=$('#files');box.innerHTML='';
+  if(!files.length){box.innerHTML='<div class="file">(empty)</div>';return;}
+  for(const f of files){const d=document.createElement('div');d.className='file'+(flash&&!seenFiles.has(f)?' new':'');d.textContent=f;d.title=f;d.onclick=()=>viewFile(f);box.appendChild(d);seenFiles.add(f);}}catch{}}
+async function viewFile(path){const {content}=await (await fetch('/api/file?path='+encodeURIComponent(path))).json();
+  $('#mpath').textContent=path;$('#mbody').innerHTML='<pre></pre>';$('#mbody').firstChild.textContent=content;$('#modal').classList.add('show');}
+async function previewURL(){
+  // Prefer the running frontend server's own port; else fall back to /preview on 8000.
+  try{const {servers}=await (await fetch('/api/servers')).json();
+    const fe=servers.find(s=>s.kind==='frontend'&&s.running);
+    if(fe) return `http://127.0.0.1:${fe.port}/index.html?t=`+Date.now();
+  }catch{}
+  return '/preview/index.html?t='+Date.now();
+}
+async function previewFrontend(){const url=await previewURL();
+  $('#mpath').textContent=url.startsWith('http')?url+'  (served by Run-frontend server, /api proxied to backend)':url+'  (8000 fallback — click Run frontend for its own port)';
+  $('#mbody').innerHTML=`<iframe src="${url}"></iframe>`;$('#modal').classList.add('show');}
+async function loadServers(){try{const {servers}=await (await fetch('/api/servers')).json();const box=$('#servers');
+  if(!servers.length){box.innerHTML='(none)';return;}box.innerHTML='';
+  for(const s of servers){const d=document.createElement('div');d.className='srv';
+    d.innerHTML=`<span class="k ${s.running?'':'off'}"></span>${s.kind} :${s.port} <a href="${s.url}" target="_blank">open ↗</a>`;box.appendChild(d);}}catch{}}
+
+// ---- health ----
+async function health(){try{const h=await (await fetch('/health')).json();$('#dot').classList.add('ok');$('#status').textContent='online';$('#model').textContent=h.model;$('#ws').textContent=h.workspace;}catch{$('#status').textContent='offline';}}
+function renderPresets(){PRESETS.forEach(p=>{const b=document.createElement('span');b.className='preset';b.textContent=p.label;b.onclick=()=>{$('#input').value=p.text;$('#input').focus();};$('#presets').appendChild(b);});}
+
+$('#send').onclick=send;
+$('#input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+$('#mode').onchange=()=>loadTopology($('#mode').value);
+$('#clear').onclick=()=>{$('#transcript').innerHTML='';$('#steps').innerHTML='';};
+$('#newthread').onclick=()=>{$('#thread').value='ui-'+Math.floor(Math.random()*1e4);$('#transcript').innerHTML='';$('#steps').innerHTML='';};
+$('#refresh').onclick=()=>loadFiles(false);
+$('#refreshSrv').onclick=loadServers;
+$('#preview').onclick=previewFrontend;
+$('#previewTab').onclick=async()=>window.open(await previewURL(),'_blank');
+async function runSrv(kind){try{const r=await fetch('/api/run/'+kind,{method:'POST'});const j=await r.json();caption('<span class="k">'+(j.status||'')+'</span>');loadServers();}catch(e){caption('<span style="color:var(--err)">'+e.message+'</span>');}}
+$('#runBackend').onclick=()=>runSrv('backend');
+$('#runFrontend').onclick=()=>runSrv('frontend');
+$('#stopSrv').onclick=()=>runSrv('stop');
+$('#mclose').onclick=()=>$('#modal').classList.remove('show');
+$('#modal').onclick=e=>{if(e.target.id==='modal')$('#modal').classList.remove('show');};
+
+health();renderPresets();loadTopology($('#mode').value);loadFiles(false);loadServers();
+</script>
+</body>
+</html>
